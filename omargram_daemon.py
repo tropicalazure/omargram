@@ -50,15 +50,22 @@ except ImportError as e:
     sys.exit(1)
 
 def load_config():
+    cfg = {
+        "api_id": DEFAULT_API_ID,
+        "api_hash": DEFAULT_API_HASH,
+        "auto_popup": True,
+        "notifications": True,
+    }
     cfg_file = os.path.join(CONFIG_DIR, "config.json")
     if os.path.exists(cfg_file):
         try:
             with open(cfg_file, "r", encoding="utf-8") as f:
                 d = json.load(f)
-                return d.get("api_id", DEFAULT_API_ID), d.get("api_hash", DEFAULT_API_HASH)
+                if isinstance(d, dict):
+                    cfg.update(d)
         except Exception:
             pass
-    return DEFAULT_API_ID, DEFAULT_API_HASH
+    return cfg
 
 def get_avatar_color(name):
     """Generate consistent aesthetic pastel hue from name."""
@@ -116,13 +123,20 @@ class SafeSQLiteSession(SQLiteSession):
                 self._conn.execute("PRAGMA busy_timeout = 30000")
             except Exception:
                 pass
+            try:
+                if os.path.exists(self.filename):
+                    os.chmod(self.filename, 0o600)
+            except Exception:
+                pass
         return self._conn.cursor()
 
 class OmarGramDaemon:
     def __init__(self):
-        api_id, api_hash = load_config()
-        self.api_id = api_id
-        self.api_hash = api_hash
+        self.config = load_config()
+        self.api_id = self.config.get("api_id", DEFAULT_API_ID)
+        self.api_hash = self.config.get("api_hash", DEFAULT_API_HASH)
+        self.auto_popup = bool(self.config.get("auto_popup", True))
+        self.notifications = bool(self.config.get("notifications", True))
         self.client = TelegramClient(SafeSQLiteSession(SESSION_PATH), self.api_id, self.api_hash)
         self.qr_login_obj = None
         self.phone_code_hash = None
@@ -254,16 +268,25 @@ class OmarGramDaemon:
             preview = m.message or ("Media" if m.media else "New message")
             if len(preview) > 120:
                 preview = preview[:117] + "..."
-            cmd = [
-                "omarchy-notification-send",
-                "-u", "normal",
-                "-g", "󰭹",
-                "--app-name", "OmarGram",
-                "--exec", f"omarchy-shell omargram chat {cid}",
-                sender_name,
-                preview
-            ]
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if self.notifications:
+                cmd = [
+                    "omarchy-notification-send",
+                    "-u", "normal",
+                    "-g", "󰭹",
+                    "--app-name", "OmarGram",
+                    "--exec", f"omarchy-shell omargram chat {cid}",
+                    sender_name,
+                    preview
+                ]
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            # Auto pop open the conversation in OmarGram so the user never misses messages
+            if self.auto_popup:
+                subprocess.Popen(
+                    ["omarchy-shell", "omargram", "chat", str(cid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
         except Exception:
             pass
 

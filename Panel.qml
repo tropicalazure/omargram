@@ -246,15 +246,27 @@ Panel {
     if (chat.is_forum && (chat.is_group || chat.is_channel)) {
       loadForumTopics(chat.id)
     }
+    Qt.callLater(function() {
+      if (root.opened && messageViewComp && messageViewComp.visible) {
+        messageViewComp.focusInput()
+      }
+    })
   }
 
+  property string _pendingChatId: ""
+
   function selectChatById(chatId) {
+    if (!chatId) return
+    var targetStr = String(chatId)
+    _pendingChatId = targetStr
     for (var i = 0; i < allChats.length; i++) {
-      if (allChats[i].id === chatId) {
+      if (String(allChats[i].id) === targetStr) {
+        _pendingChatId = ""
         selectChat(allChats[i])
-        break
+        return
       }
     }
+    if (!dialogsProc.running) dialogsProc.running = true
   }
 
   property var replyingTo: null
@@ -467,8 +479,9 @@ Panel {
       updated.push(m)
     }
     activeMessages = updated
-    if (messagesCache[chatId]) {
-      messagesCache[chatId] = updated
+    var dk = String(chatId) + (activeTopic ? "_" + String(activeTopic.id) : "")
+    if (messagesCache[dk]) {
+      messagesCache[dk] = updated
     }
   }
 
@@ -486,7 +499,8 @@ Panel {
       updated.push(m)
     }
     activeMessages = updated
-    if (messagesCache[chatId]) messagesCache[chatId] = updated
+    var dk = String(chatId) + (activeTopic ? "_" + String(activeTopic.id) : "")
+    if (messagesCache[dk]) messagesCache[dk] = updated
   }
 
   function unpinMessage(chatId, messageId) {
@@ -504,7 +518,8 @@ Panel {
       updated.push(m)
     }
     activeMessages = updated
-    if (messagesCache[chatId]) messagesCache[chatId] = updated
+    var dk = String(chatId) + (activeTopic ? "_" + String(activeTopic.id) : "")
+    if (messagesCache[dk]) messagesCache[dk] = updated
   }
 
   // ---- Multi-Select Actions
@@ -1005,6 +1020,10 @@ Panel {
               }
             }
             root.unreadCount = count
+
+            if (root._pendingChatId) {
+              root.selectChatById(root._pendingChatId)
+            }
           }
         } catch (e) {}
       }
@@ -1209,28 +1228,14 @@ Panel {
     id: openExtProc
   }
 
-  // Background Poll Timer
+  // Background Poll Timer (gentle fallback heartbeat; real-time events handled via MTProto IPC)
   Timer {
     id: pollTimer
-    interval: root.opened ? 1500 : 6000
+    interval: root.opened ? 5000 : 15000
     running: true; repeat: true; triggeredOnStart: true
     onTriggered: root.refresh()
   }
 
-  // IPC
-  IpcHandler {
-    target: "omargram"
-    function open() { root.openFromHotkey() }
-    function close() { root.close() }
-    function toggle() { root.toggle() }
-    function chat(chatId) {
-      root.openFromHotkey()
-      root.selectChatById(chatId)
-    }
-    function refresh() {
-      root.refresh()
-    }
-  }
 
   // ---- Popup Window
   KeyboardPanel {
@@ -1239,6 +1244,7 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
+    focusTarget: keyCatcher
     centerOnBar: false
     contentWidth: panel.fittedContentWidth(Style.space(760))
     contentHeight: panel.fittedContentHeight(Style.space(520), Style.space(640))
@@ -1246,6 +1252,13 @@ Panel {
     onOpenChanged: {
       if (open) {
         root.refresh()
+        Qt.callLater(function() {
+          if (root.selectedChat && messageViewComp && messageViewComp.visible) {
+            messageViewComp.focusInput()
+          } else if (keyCatcher) {
+            keyCatcher.forceActiveFocus()
+          }
+        })
       }
     }
 
@@ -1253,11 +1266,19 @@ Panel {
       id: keyCatcher
       anchors.fill: parent
 
+      Keys.onPressed: function(event) {
+        if ((event.key === Qt.Key_W && (event.modifiers & (Qt.MetaModifier | Qt.ControlModifier))) ||
+            event.key === Qt.Key_Escape) {
+          root.close()
+          event.accepted = true
+          return
+        }
+      }
+
       onCloseRequested: {
         if (root.activeMediaViewer !== null) root.closeMediaViewer()
         else if (root.forwardModalOpen) root.closeForwardDialog()
         else if (root.filePickerOpen) root.closeFilePicker()
-        else if (root.selectedChat) root.closeActiveChat()
         else root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }

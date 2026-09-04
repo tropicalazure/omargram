@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
@@ -67,12 +68,29 @@ BarWidget {
 
   Loader {
     id: panelLoader
-    active: false
+    active: true
     source: Qt.resolvedUrl("Panel.qml")
     visible: false
     onLoaded: {
       root.injectPanel()
       Qt.callLater(root.injectPanel)
+    }
+  }
+
+  IpcHandler {
+    target: "omargram"
+
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.togglePanel() }
+    function chat(chatId: string): void {
+      root.open()
+      root.openChat(chatId)
+    }
+    function refresh(): void {
+      root.refresh()
     }
   }
 

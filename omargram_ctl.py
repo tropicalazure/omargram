@@ -216,30 +216,59 @@ def extract_clipboard_image():
     return {"success": True, "has_image": False}
 
 def pick_file_dialog():
-    env = dict(os.environ)
-    env["NO_AT_SPI_CLIENT_BUS"] = "1"
-    env["GDK_BACKEND"] = "wayland,x11"
-    try:
-        res = subprocess.check_output(
-            ["zenity", "--file-selection", "--title=Select media or file to attach in OmarGram"],
-            env=env,
-            stderr=subprocess.DEVNULL,
-            timeout=120.0
-        ).decode("utf-8").strip()
-        if res and os.path.exists(res):
-            return {
-                "success": True,
-                "file_path": res,
-                "file_name": os.path.basename(res),
-                "file_size": os.path.getsize(res)
-            }
-    except subprocess.TimeoutExpired:
-        return {"success": False, "error": "Dialog timed out"}
-    except subprocess.CalledProcessError:
-        return {"success": True, "cancelled": True}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-    return {"success": True, "cancelled": True}
+    # 1. Prefer native Omarchy desktop portal file picker
+    omarchy_picker = shutil.which("omarchy-file-select")
+    if omarchy_picker:
+        try:
+            res = subprocess.check_output(
+                [omarchy_picker, "--title", "Select media or file to attach in OmarGram"],
+                stderr=subprocess.DEVNULL,
+                timeout=120.0
+            ).decode("utf-8").strip()
+            if res and os.path.exists(res):
+                return {
+                    "success": True,
+                    "file_path": res,
+                    "file_name": os.path.basename(res),
+                    "file_size": os.path.getsize(res)
+                }
+            return {"success": True, "cancelled": True}
+        except subprocess.CalledProcessError as e:
+            if e.returncode == 1:  # EXIT_NOTHING_PICKED / user cancelled
+                return {"success": True, "cancelled": True}
+        except subprocess.TimeoutExpired:
+            return {"success": False, "error": "Dialog timed out"}
+        except Exception:
+            pass
+
+    # 2. Fallback to zenity if available
+    zenity_bin = shutil.which("zenity")
+    if zenity_bin:
+        env = dict(os.environ)
+        env["NO_AT_SPI_CLIENT_BUS"] = "1"
+        env["GDK_BACKEND"] = "wayland,x11"
+        try:
+            res = subprocess.check_output(
+                [zenity_bin, "--file-selection", "--title=Select media or file to attach in OmarGram"],
+                env=env,
+                stderr=subprocess.DEVNULL,
+                timeout=120.0
+            ).decode("utf-8").strip()
+            if res and os.path.exists(res):
+                return {
+                    "success": True,
+                    "file_path": res,
+                    "file_name": os.path.basename(res),
+                    "file_size": os.path.getsize(res)
+                }
+        except subprocess.TimeoutExpired:
+            return {"success": False, "error": "Dialog timed out"}
+        except subprocess.CalledProcessError:
+            return {"success": True, "cancelled": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    return {"success": False, "error": "No file chooser available (omarchy-file-select or zenity required)"}
 
 def browse_directory(dir_path="pictures", limit=80):
     home = os.path.expanduser("~")

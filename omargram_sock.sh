@@ -2,8 +2,29 @@
 # Fast socket bridge - skips Python startup (saves ~0.4s per call)
 SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omargram/omargram.sock"
 PLUGIN_DIR="$(dirname "$(readlink -f "$0")")"
-PY="${OMARGRAM_PYTHON:-$(command -v python3)}"
-[ -x "$PY" ] || PY=/usr/bin/python3
+PY="${OMARGRAM_PYTHON:-}"
+if [ -z "$PY" ]; then
+  if [ -x "$HOME/.venv/omargram/bin/python3" ]; then
+    PY="$HOME/.venv/omargram/bin/python3"
+  elif [ -x "$PLUGIN_DIR/.venv/bin/python3" ]; then
+    PY="$PLUGIN_DIR/.venv/bin/python3"
+  elif command -v python3 >/dev/null 2>&1; then
+    PY="$(command -v python3)"
+  else
+    PY=/usr/bin/python3
+  fi
+fi
+
+# Escape strings for valid JSON interpolation
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
 
 # Check if daemon is active and responsive on the socket
 is_daemon_alive() {
@@ -14,14 +35,20 @@ is_daemon_alive() {
 if ! is_daemon_alive; then
   RUN_DIR="$(dirname "$SOCK")"
   mkdir -p "$RUN_DIR"
-  rm -f "$SOCK" 2>/dev/null
-  pkill -f omargram_daemon.py 2>/dev/null || true
-  rm -f "$HOME/.config/omargram/omargram.session-journal" 2>/dev/null
-  nohup "$PY" "$PLUGIN_DIR/omargram_daemon.py" > "$RUN_DIR/daemon.log" 2>&1 &
-  for i in $(seq 1 25); do
-    is_daemon_alive && break
-    sleep 0.2
-  done
+  LOCKFILE="$RUN_DIR/daemon_spawn.lock"
+  (
+    flock -x -w 10 200 || exit 1
+    if ! is_daemon_alive; then
+      rm -f "$SOCK" 2>/dev/null
+      pkill -f omargram_daemon.py 2>/dev/null || true
+      nohup "$PY" "$PLUGIN_DIR/omargram_daemon.py" > "$RUN_DIR/daemon.log" 2>&1 &
+      for i in $(seq 1 30); do
+        is_daemon_alive && break
+        sleep 0.2
+      done
+    fi
+  ) 200>"$LOCKFILE"
+
   if ! is_daemon_alive; then
     echo "{\"success\":false,\"error\":\"daemon failed to start — see $RUN_DIR/daemon.log\"}"
     omarchy-notification-send -u critical -g "󰅙" "OmarGram" "Daemon failed to start — check $RUN_DIR/daemon.log" 2>/dev/null
@@ -72,16 +99,9 @@ case "$action" in
           args+=("$1"); shift ;;
       esac
     done
-    if [ "${#args[@]}" -gt 1 ] && [ -z "$topic_id" ] && [ -z "$reply_to" ]; then
-      last_arg="${args[-1]}"
-      if [[ "$last_arg" =~ ^-?[0-9]+$ ]]; then
-        topic_id="$last_arg"
-        unset 'args[${#args[@]}-1]'
-      fi
-    fi
     text="${args[*]}"
-    text="${text//\\/\\\\}"; text="${text//\"/\\\"}"; text="${text//$'\n'/\\n}"
-    json="{\"action\":\"send\",\"chat_id\":\"$chat_id\",\"text\":\"$text\""
+    escaped_text="$(json_escape "$text")"
+    json="{\"action\":\"send\",\"chat_id\":\"$chat_id\",\"text\":\"$escaped_text\""
     if [ -n "$topic_id" ]; then json="$json,\"topic_id\":\"$topic_id\""; fi
     if [ -n "$reply_to" ]; then json="$json,\"reply_to\":\"$reply_to\""; fi
     json="$json}"
@@ -105,8 +125,9 @@ case "$action" in
     if [ "${#args[@]}" -ge 1 ]; then caption="${args[0]}"; fi
     if [ "${#args[@]}" -ge 2 ] && [ -z "$reply_to" ]; then reply_to="${args[1]}"; fi
     if [ "${#args[@]}" -ge 3 ] && [ -z "$topic_id" ]; then topic_id="${args[2]}"; fi
-    caption="${caption//\\/\\\\}"; caption="${caption//\"/\\\"}"
-    json="{\"action\":\"send_file\",\"chat_id\":\"$chat_id\",\"file_path\":\"$file_path\",\"caption\":\"$caption\""
+    escaped_caption="$(json_escape "$caption")"
+    escaped_file_path="$(json_escape "$file_path")"
+    json="{\"action\":\"send_file\",\"chat_id\":\"$chat_id\",\"file_path\":\"$escaped_file_path\",\"caption\":\"$escaped_caption\""
     if [ -n "$reply_to" ]; then json="$json,\"reply_to\":\"$reply_to\""; fi
     if [ -n "$topic_id" ]; then json="$json,\"topic_id\":\"$topic_id\""; fi
     json="$json}"
@@ -141,8 +162,8 @@ case "$action" in
   edit)
     chat_id="$1"; msg_id="$2"; shift 2
     text="$*"
-    text="${text//\\/\\\\}"; text="${text//\"/\\\"}"; text="${text//$'\n'/\\n}"
-    json="{\"action\":\"edit_message\",\"chat_id\":\"$chat_id\",\"message_id\":\"$msg_id\",\"text\":\"$text\"}"
+    escaped_text="$(json_escape "$text")"
+    json="{\"action\":\"edit_message\",\"chat_id\":\"$chat_id\",\"message_id\":\"$msg_id\",\"text\":\"$escaped_text\"}"
     ;;
   pin)
     json="{\"action\":\"pin_message\",\"chat_id\":\"$1\",\"message_id\":\"$2\"}"
@@ -170,19 +191,23 @@ case "$action" in
     json="{\"action\":\"start_qr\"}"
     ;;
   send_code)
-    json="{\"action\":\"send_code\",\"phone\":\"$1\"}"
+    escaped_phone="$(json_escape "$1")"
+    json="{\"action\":\"send_code\",\"phone\":\"$escaped_phone\"}"
     ;;
   submit_code)
     code="$1"; pwd="${2:-}"
-    json="{\"action\":\"submit_code\",\"code\":\"$code\",\"password\":\"$pwd\"}"
+    escaped_code="$(json_escape "$code")"
+    escaped_pwd="$(json_escape "$pwd")"
+    json="{\"action\":\"submit_code\",\"code\":\"$escaped_code\",\"password\":\"$escaped_pwd\"}"
     ;;
   download_media)
     chat_id="$1"; msg_id="$2"; media_type="${3:-video}"
     json="{\"action\":\"download_media\",\"chat_id\":\"$chat_id\",\"message_id\":\"$msg_id\",\"media_type\":\"$media_type\"}"
     ;;
   open_external)
-    file_path="$1"; app="${2:-xdg-open}"
-    json="{\"action\":\"open_external\",\"file_path\":\"$file_path\",\"app\":\"$app\"}"
+    escaped_file_path="$(json_escape "$1")"
+    escaped_app="$(json_escape "${2:-xdg-open}")"
+    json="{\"action\":\"open_external\",\"file_path\":\"$escaped_file_path\",\"app\":\"$escaped_app\"}"
     ;;
   logout)
     json="{\"action\":\"logout\"}"
@@ -195,4 +220,4 @@ case "$action" in
     ;;
 esac
 
-echo "$json" | socat - UNIX-CONNECT:"$SOCK" 2>/dev/null
+echo "$json" | socat -t 60 - UNIX-CONNECT:"$SOCK" 2>/dev/null

@@ -551,7 +551,7 @@ Item {
         contentItem: Text {
           textFormat: Text.PlainText
           text: modelData.unread_count > 0 ? (modelData.title + " (" + modelData.unread_count + " unread)") : (modelData.title || "")
-          color: Color.popups.foreground
+          color: Color.popups.text
           font.family: p.fontFamily
           font.pixelSize: Style.font.caption
         }
@@ -1012,8 +1012,8 @@ Item {
 
     BorderSurface {
       id: profileBox
-      anchors.top: headerCard.bottom
-      anchors.topMargin: Style.space(4)
+      anchors.top: parent.top
+      anchors.topMargin: headerCard.height + Style.space(8)
       anchors.left: parent.left
       anchors.leftMargin: Style.space(4)
       width: Style.space(220)

@@ -7,6 +7,11 @@ import qs.Ui
 Item {
   id: root
   property var p  // Panel root
+  property alias inputArea: inputArea
+
+  function focusInput() {
+    inputArea.forceActiveFocus()
+  }
 
   implicitHeight: ((p.replyingTo || p.editingMessage) ? Style.space(28) : 0)
     + (p.attachedFile ? Style.space(48) : 0)
@@ -280,6 +285,14 @@ Item {
                   event.accepted = true
                   return
                 }
+                p.close()
+                event.accepted = true
+                return
+              }
+              if (event.key === Qt.Key_W && (event.modifiers & (Qt.MetaModifier | Qt.ControlModifier))) {
+                p.close()
+                event.accepted = true
+                return
               }
               if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_V) {
                 p.checkAndPasteClipboardImage()

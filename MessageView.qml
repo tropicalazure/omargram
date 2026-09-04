@@ -10,6 +10,12 @@ Item {
 
   anchors.fill: parent
 
+  property alias composer: composerComp
+  property alias focusItem: composerComp.inputArea
+  function focusInput() {
+    if (composerComp && composerComp.focusInput) composerComp.focusInput()
+  }
+
   function jumpToMessageId(targetId) {
     if (!targetId || !p.activeMessages) return
     for (var idx = 0; idx < p.activeMessages.length; idx++) {
@@ -77,66 +83,11 @@ Item {
         }
       }
 
-      // Header Action Buttons (Right)
-      Row {
-        id: headerActionBtns
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(4)
-
-        // Sidebar Collapse / Expand Toggle
-        PanelActionButton {
-          iconText: p.sidebarCollapsed ? "\uf061" : "\uf060"
-          tooltipText: p.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
-          foreground: p.foreground; hoverColor: Color.accent; fontFamily: p.fontFamily
-          onClicked: p.toggleSidebar()
-        }
-
-        // Report Spam and Leave (for scam/spam channels or groups)
-        PanelActionButton {
-          visible: p.selectedChat && (p.selectedChat.is_group || p.selectedChat.is_channel)
-          iconText: "\uf071"
-          tooltipText: "Report spam and leave"
-          foreground: p.danger; hoverColor: p.danger; fontFamily: p.fontFamily
-          onClicked: p.reportSpamAndLeave(p.selectedChat.id)
-        }
-
-        // Leave Channel / Group
-        PanelActionButton {
-          visible: p.selectedChat && (p.selectedChat.is_group || p.selectedChat.is_channel)
-          iconText: "\uf2f5"
-          tooltipText: (p.selectedChat && p.selectedChat.is_channel) ? "Leave channel" : "Leave group"
-          foreground: p.foreground; hoverColor: p.danger; fontFamily: p.fontFamily
-          onClicked: p.leaveChat(p.selectedChat.id)
-        }
-
-        PanelActionButton {
-          iconText: "\uf021"
-          tooltipText: "Refresh messages"
-          foreground: p.foreground; hoverColor: Color.accent; fontFamily: p.fontFamily
-          onClicked: p.loadMessages(p.selectedChat.id)
-        }
-
-        PanelActionButton {
-          iconText: "\uf00c"
-          tooltipText: "Mark chat as read"
-          foreground: p.foreground; hoverColor: Color.accent; fontFamily: p.fontFamily
-          onClicked: p.markChatRead(p.selectedChat.id)
-        }
-
-        PanelActionButton {
-          iconText: "\uf00d"
-          tooltipText: "Close chat"
-          foreground: p.foreground; hoverColor: p.urgent; fontFamily: p.fontFamily
-          onClicked: p.closeActiveChat()
-        }
-      }
-
-      // Title & Status Column (Fills space between avatar and actions)
+      // Title & Status Column
       Column {
         anchors.left: headerAvatarBox.right
         anchors.leftMargin: Style.space(8)
-        anchors.right: headerActionBtns.left
+        anchors.right: parent.right
         anchors.rightMargin: Style.space(8)
         anchors.verticalCenter: parent.verticalCenter
         spacing: 1
@@ -333,25 +284,32 @@ Item {
       }
 
       // Forward button
-      Row {
+      Item {
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(3)
+        implicitWidth: fwdRow.implicitWidth
+        implicitHeight: fwdRow.implicitHeight
         opacity: p.selectedMsgIds.length > 0 ? 1.0 : 0.4
 
-        Text {
+        Row {
+          id: fwdRow
           anchors.verticalCenter: parent.verticalCenter
-          text: "\uf064"
-          color: Color.accent
-          font.family: p.fontFamily
-          font.pixelSize: Style.space(11)
-        }
-        Text {
-          anchors.verticalCenter: parent.verticalCenter
-          text: "Forward"
-          color: Color.accent
-          font.family: p.fontFamily
-          font.pixelSize: Style.font.caption
-          font.bold: true
+          spacing: Style.space(3)
+
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "\uf064"
+            color: Color.accent
+            font.family: p.fontFamily
+            font.pixelSize: Style.space(11)
+          }
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Forward"
+            color: Color.accent
+            font.family: p.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
         }
 
         ToolTip.visible: fwdSelM.containsMouse
