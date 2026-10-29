@@ -53,7 +53,7 @@ def load_config():
     cfg = {
         "api_id": DEFAULT_API_ID,
         "api_hash": DEFAULT_API_HASH,
-        "auto_popup": True,
+        "auto_popup": False,
         "notifications": True,
     }
     cfg_file = os.path.join(CONFIG_DIR, "config.json")
@@ -280,8 +280,8 @@ class OmarGramDaemon:
                 ]
                 subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            # Auto pop open the conversation in OmarGram so the user never misses messages
-            if self.auto_popup:
+            # Auto pop open the conversation in OmarGram if enabled and lid is open / screen unlocked
+            if self.auto_popup and not self.is_lid_closed() and not self.is_screen_locked():
                 subprocess.Popen(
                     ["omarchy-shell", "omargram", "chat", str(cid)],
                     stdout=subprocess.DEVNULL,
@@ -289,6 +289,28 @@ class OmarGramDaemon:
                 )
         except Exception:
             pass
+
+    @staticmethod
+    def is_lid_closed():
+        try:
+            import glob
+            for f in glob.glob("/proc/acpi/button/lid/*/state"):
+                with open(f, "r") as fp:
+                    if "closed" in fp.read().lower():
+                        return True
+        except Exception:
+            pass
+        return False
+
+    @staticmethod
+    def is_screen_locked():
+        try:
+            res = subprocess.run(["pgrep", "-x", "hyprlock"], capture_output=True)
+            if res.returncode == 0:
+                return True
+        except Exception:
+            pass
+        return False
 
     async def update_unread_count(self):
         if not await self.client.is_user_authorized():

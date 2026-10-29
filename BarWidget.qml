@@ -8,6 +8,13 @@ BarWidget {
   id: root
   moduleName: "omargram"
 
+  readonly property var primaryWidget: {
+    if (!root.bar || typeof root.bar.moduleWidgets !== "function") return null
+    var items = root.bar.moduleWidgets(root.moduleName)
+    return items.length > 0 ? items[0] : null
+  }
+  readonly property bool isPrimaryInstance: primaryWidget === root
+
   function ensurePanel() {
     if (!panelLoader.active) {
       panelLoader.active = true
@@ -57,18 +64,21 @@ BarWidget {
     if (panelLoader.item) panelLoader.item.closeForPopoutSwitch()
   }
 
-  readonly property int unreadCount: panelLoader.item ? panelLoader.item.unreadCount : 0
+  readonly property int unreadCount: panelLoader.item
+    ? (panelLoader.item.unreadCount || 0)
+    : (primaryWidget && primaryWidget !== root ? (primaryWidget.unreadCount || 0) : 0)
 
   visible: true
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
+  onIsPrimaryInstanceChanged: if (isPrimaryInstance) ensurePanel()
   onBarChanged: injectPanel()
   onSettingsChanged: injectPanel()
 
   Loader {
     id: panelLoader
-    active: true
+    active: false
     source: Qt.resolvedUrl("Panel.qml")
     visible: false
     onLoaded: {
@@ -78,15 +88,17 @@ BarWidget {
   }
 
   IpcHandler {
+    enabled: root.isPrimaryInstance
     target: "omargram"
 
-    function open(): void { root.open() }
-    function close(): void { root.close() }
-    function show(): void { root.open() }
-    function hide(): void { root.close() }
-    function toggle(): void { root.togglePanel() }
+    function open(): void { if (root.bar && root.bar.shell) root.bar.shell.summon(root.moduleName); else root.open() }
+    function close(): void { if (root.bar && root.bar.shell) root.bar.shell.hide(root.moduleName); else root.close() }
+    function show(): void { if (root.bar && root.bar.shell) root.bar.shell.summon(root.moduleName); else root.open() }
+    function hide(): void { if (root.bar && root.bar.shell) root.bar.shell.hide(root.moduleName); else root.close() }
+    function toggle(): void { if (root.bar && root.bar.shell) root.bar.shell.toggle(root.moduleName); else root.togglePanel() }
     function chat(chatId: string): void {
-      root.open()
+      if (root.bar && root.bar.shell) root.bar.shell.summon(root.moduleName)
+      else root.open()
       root.openChat(chatId)
     }
     function refresh(): void {

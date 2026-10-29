@@ -182,6 +182,23 @@ Item {
         text: p.searchQuery
         onTextChanged: p.searchQuery = text
 
+        Keys.onPressed: function(event) {
+          if (event.key === Qt.Key_Escape) {
+            if (searchInput.text.length > 0) {
+              searchInput.text = ""
+            } else {
+              p.close()
+            }
+            event.accepted = true
+            return
+          }
+          if (event.key === Qt.Key_W && (event.modifiers & (Qt.MetaModifier | Qt.ControlModifier))) {
+            p.close()
+            event.accepted = true
+            return
+          }
+        }
+
         Text {
           visible: !searchInput.text && !searchInput.activeFocus
           text: "Search chats..."
@@ -706,7 +723,7 @@ Item {
 
               // Outgoing Status Checks (✓ / ✓✓)
               Row {
-                visible: modelData.last_message && modelData.last_message.out === true
+                visible: !!(modelData.last_message && modelData.last_message.out === true)
                 spacing: -3
                 anchors.verticalCenter: parent.verticalCenter
 
@@ -718,7 +735,7 @@ Item {
                 }
 
                 Text {
-                  visible: modelData.last_message && (modelData.last_message.status === "read" || modelData.last_message.is_read)
+                  visible: !!(modelData.last_message && (modelData.last_message.status === "read" || modelData.last_message.is_read))
                   text: "\uf00c"
                   color: Color.accent
                   font.family: p.fontFamily

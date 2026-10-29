@@ -151,7 +151,9 @@ Panel {
   }
 
   function close() {
-    setCenterHoverRevealSuppressed(false)
+    try {
+      setCenterHoverRevealSuppressed(false)
+    } catch (e) {}
     root.controller.hide()
   }
 
@@ -167,8 +169,12 @@ Panel {
   }
 
   function setCenterHoverRevealSuppressed(value) {
-    if (root.bar && "centerHoverRevealSuppressed" in root.bar)
-      root.bar.centerHoverRevealSuppressed = value
+    try {
+      if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function")
+        root.bar.setCenterHoverRevealSuppressed(value)
+      else if (root.bar && typeof root.bar._setCenterHoverRevealSuppressed === "function")
+        root.bar._setCenterHoverRevealSuppressed(value)
+    } catch (e) {}
   }
 
   // ---- Actions

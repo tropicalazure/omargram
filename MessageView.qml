@@ -1005,7 +1005,7 @@ Item {
 
               // Site name badge (e.g. YouTube, Twitter / X, GitHub, Instagram)
               Text {
-                visible: modelData.webpage && modelData.webpage.site_name !== ""
+                visible: !!(modelData.webpage && modelData.webpage.site_name)
                 width: parent.width
                 textFormat: Text.PlainText
                 text: (modelData.webpage && modelData.webpage.site_name) ? modelData.webpage.site_name : ""
@@ -1018,7 +1018,7 @@ Item {
 
               // Webpage Title
               Text {
-                visible: modelData.webpage && modelData.webpage.title !== ""
+                visible: !!(modelData.webpage && modelData.webpage.title)
                 width: parent.width
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
@@ -1033,7 +1033,7 @@ Item {
 
               // Webpage Description snippet
               Text {
-                visible: modelData.webpage && modelData.webpage.description !== ""
+                visible: !!(modelData.webpage && modelData.webpage.description)
                 width: parent.width
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
@@ -1047,7 +1047,7 @@ Item {
 
               // Webpage Thumbnail Preview Image (Click to View Full Photo)
               BorderSurface {
-                visible: modelData.webpage && modelData.webpage.photo !== "" && modelData.webpage.photo !== undefined
+                visible: !!(modelData.webpage && modelData.webpage.photo)
                 width: parent.width
                 height: Math.min(Style.space(130), width * 0.52)
                 radius: Style.space(6)
@@ -1200,7 +1200,7 @@ Item {
               }
 
               Text {
-                visible: modelData.status === "read" || modelData.is_read
+                visible: !!(modelData.status === "read" || modelData.is_read)
                 text: "\uf00c"
                 color: p.accentForeground
                 font.family: p.fontFamily
