@@ -7,6 +7,7 @@ import time
 import asyncio
 import subprocess
 import signal
+import threading
 import socket
 import re
 import hashlib
@@ -85,6 +86,12 @@ def get_initials(name):
     if len(parts) >= 2:
         return (parts[0][0] + parts[-1][0]).upper()
     return name.strip()[:2].upper()
+
+def spawn(cmd):
+    """Start a helper without blocking; a thread reaps it so no zombie is left."""
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    threading.Thread(target=proc.wait, daemon=True).start()
+    return proc
 
 def format_message_action(msg):
     if not msg or not getattr(msg, "action", None):
@@ -253,7 +260,7 @@ class OmarGramDaemon:
 
     def notify_shell_refresh(self):
         try:
-            subprocess.Popen(["omarchy-shell", "omargram", "refresh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            spawn(["omarchy-shell", "omargram", "refresh"])
         except Exception:
             pass
 
@@ -278,15 +285,11 @@ class OmarGramDaemon:
                     sender_name,
                     preview
                 ]
-                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                spawn(cmd)
 
             # Auto pop open the conversation in OmarGram if enabled and lid is open / screen unlocked
             if self.auto_popup and not self.is_lid_closed() and not self.is_screen_locked():
-                subprocess.Popen(
-                    ["omarchy-shell", "omargram", "chat", str(cid)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
+                spawn(["omarchy-shell", "omargram", "chat", str(cid)])
         except Exception:
             pass
 
@@ -1317,9 +1320,8 @@ class OmarGramDaemon:
             if not file_path or not os.path.exists(file_path):
                 return {"success": False, "error": "File does not exist"}
             try:
-                import subprocess
                 cmd = ["mpv", file_path] if app == "mpv" else ["xdg-open", file_path]
-                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                spawn(cmd)
                 return {"success": True, "file_path": file_path, "app": app}
             except Exception as e:
                 return {"success": False, "error": str(e)}
